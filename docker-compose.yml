@@ -1,0 +1,69 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.10.0-python3.11
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth'
+    PYTHONPATH: /opt/airflow/agent
+    _PIP_ADDITIONAL_REQUIREMENTS: "databases asyncpg psycopg2-binary sqlalchemy==1.4.52 pandas numpy scipy python-dotenv slack-sdk openai langgraph langchain-openai langchain"
+  env_file:
+    - .env
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./agent:/opt/airflow/agent
+    - ./logs:/opt/airflow/logs
+  depends_on:
+    - postgres
+  networks:
+    - alert_network
+
+services:
+
+  # --- PostgreSQL for both Airflow metadata and Gold Layer ---
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    networks:
+      - alert_network
+    ports:
+      - "5432:5432"
+
+  # --- Airflow webserver ---
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    restart: always
+
+  # --- Airflow scheduler ---
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+
+  # --- Airflow DB init ---
+  # Runs once to initialize the Airflow metadata database
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "airflow db init && airflow users create --username admin --password admin --firstname Jose --lastname Lopez --role Admin --email joselopez1999.ds@gmail.com"
+    restart: on-failure
+
+volumes:
+  postgres_data:
+
+networks:
+  alert_network:
+    driver: bridge
