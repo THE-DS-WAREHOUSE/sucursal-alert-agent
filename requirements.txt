@@ -1,0 +1,14 @@
+apache-airflow
+langgraph
+langchain-openai
+langchain
+sqlalchemy
+psycopg2-binary
+databases
+asyncpg
+pandas
+numpy
+scipy
+python-dotenv
+slack-sdk
+openai
